@@ -70,7 +70,7 @@ def convert_time(seconds):
     remaining_seconds = seconds % 60
     return f"{minutes}:{remaining_seconds:06.3f}"
 
-# Main function to get level runs for a user and export to Excel
+# Main function to get level runs for a user and return as a dictionary
 def get_level_runs(username):
     # Define the desired order of levels
     level_order = [
@@ -87,8 +87,8 @@ def get_level_runs(username):
         "Wet-Dry World",
         "Tall, Tall Mountain",
         "Tiny-Huge Island",
-        "Rainbow Ride",
-        "Tick Tock Clock"
+        "Tick Tock Clock",
+        "Rainbow Ride"
     ]
 
     # Get the game ID
@@ -96,13 +96,13 @@ def get_level_runs(username):
     game_id = get_game_id(game_name)
     if not game_id:
         print("Failed to retrieve game ID.")
-        return
+        return {}
 
     # Get the user ID
     user_id = get_user_id(username)
     if not user_id:
         print("Failed to retrieve user ID.")
-        return
+        return {}
 
     print(f"Fetching level runs for user: {username}")
 
@@ -110,9 +110,9 @@ def get_level_runs(username):
     all_runs = get_runs_by_user(user_id)
     if not all_runs:
         print("Failed to retrieve runs or no runs found.")
-        return
+        return {}
 
-    # Filter runs to include only those for the specified game and accepted runs
+    # Filter runs to include only those for the specified game and approved runs
     level_runs = [run for run in all_runs if run['game'] == game_id and run['level'] and run['status']['status'] == 'verified']
     fastest_runs = {}
 
@@ -127,32 +127,39 @@ def get_level_runs(username):
             fastest_runs[key] = run
 
     # Prepare data for export
-    data = []
+    user_data = {"Username": username}
     for level_name in level_order:
+        user_data[level_name] = ""
         for key, run in fastest_runs.items():
             level_id, category_id = key
             if get_level_name(level_id) == level_name:
                 time_seconds = run['times']['primary_t']
                 time_formatted = convert_time(time_seconds)
-                category_name = get_category_name(category_id)
-                date = run['date']
-                data.append([username, level_name, category_name, time_formatted, date])
+                user_data[level_name] = time_formatted
+                break  # Move to the next level once the fastest run is found
+    return user_data
 
-    # Create a DataFrame and export to Excel
-    df = pd.DataFrame(data, columns=["Username", "Level", "Category", "Time", "Date"])
-
+# Prepare the data for all users and export to Excel
+def export_all_users_to_excel(usernames):
     # Ensure the 'exports' directory exists
     export_dir = "exports"
     os.makedirs(export_dir, exist_ok=True)
 
-    # Export the DataFrame to an Excel file in the 'exports' directory
-    file_path = os.path.join(export_dir, f"{username}_level_runs.xlsx")
+    all_data = []
+    for username in usernames:
+        user_data = get_level_runs(username)
+        if user_data:
+            all_data.append(user_data)
+
+    # Create a DataFrame and export to Excel
+    df = pd.DataFrame(all_data)
+    file_path = os.path.join(export_dir, "all_users_level_runs.xlsx")
     df.to_excel(file_path, index=False)
     print(f"Exported data to {file_path}")
 
+# List of users to process
+realones = ["vadien", "xwicko"]
 goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 
-#get_level_runs("fgsm")
-
-for runner in goats:
-    get_level_runs(runner)
+# Export data for all users to Excel
+export_all_users_to_excel(realones)
