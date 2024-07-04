@@ -72,7 +72,7 @@ def convert_time(seconds):
 
 # Main function to get level runs for a user and return as a dictionary
 def get_level_runs(username):
-    # Define the desired order of levels
+    # Define the desired order of levels and their acronyms
     level_order = [
         "Bob-omb Battlefield",
         "Whomp's Fortress",
@@ -90,6 +90,27 @@ def get_level_runs(username):
         "Tick Tock Clock",
         "Rainbow Ride"
     ]
+
+    acronyms = [
+        "BOB",
+        "WF",
+        "JRB",
+        "CCM",
+        "BBH",
+        "HMC",
+        "LLL",
+        "SSL",
+        "DDD",
+        "SL",
+        "WDW",
+        "TTM",
+        "THI",
+        "TTC",
+        "RR"
+    ]
+
+    # Create a mapping from full names to acronyms
+    level_name_to_acronym = dict(zip(level_order, acronyms))
 
     # Get the game ID
     game_name = "Super Mario 64"
@@ -129,13 +150,13 @@ def get_level_runs(username):
     # Prepare data for export
     user_data = {"Username": username}
     for level_name in level_order:
-        user_data[level_name] = ""
+        user_data[level_name_to_acronym[level_name]] = ""
         for key, run in fastest_runs.items():
             level_id, category_id = key
             if get_level_name(level_id) == level_name:
                 time_seconds = run['times']['primary_t']
                 time_formatted = convert_time(time_seconds)
-                user_data[level_name] = time_formatted
+                user_data[level_name_to_acronym[level_name]] = time_formatted
                 break  # Move to the next level once the fastest run is found
     return user_data
 
@@ -158,8 +179,7 @@ def export_all_users_to_excel(usernames):
     print(f"Exported data to {file_path}")
 
 # List of users to process
-realones = ["vadien", "xwicko"]
 goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 
 # Export data for all users to Excel
-export_all_users_to_excel(realones)
+export_all_users_to_excel(goats)
