@@ -112,8 +112,8 @@ def get_level_runs(username):
         print("Failed to retrieve runs or no runs found.")
         return
 
-    # Filter runs to include only those for the specified game
-    level_runs = [run for run in all_runs if run['game'] == game_id and run['level']]
+    # Filter runs to include only those for the specified game and accepted runs
+    level_runs = [run for run in all_runs if run['game'] == game_id and run['level'] and run['status']['status'] == 'verified']
     fastest_runs = {}
 
     # Find the fastest run for each level and category
@@ -152,7 +152,7 @@ def get_level_runs(username):
 
 goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 
-#get_level_runs("FGSM")
+#get_level_runs("fgsm")
 
 for runner in goats:
     get_level_runs(runner)
