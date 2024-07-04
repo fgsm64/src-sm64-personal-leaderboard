@@ -1,6 +1,7 @@
 import requests
 import pandas as pd
 import os
+import xlsxwriter
 
 # Define the base URL for the Speedrun.com API
 base_url = "https://www.speedrun.com/api/v1"
@@ -149,6 +150,7 @@ def get_level_runs(username):
 
     # Prepare data for export
     user_data = {"Username": username}
+    detailed_data = {acronym: [] for acronym in acronyms}  # Prepare detailed data for each level
     for level_name in level_order:
         user_data[level_name_to_acronym[level_name]] = ""
         for key, run in fastest_runs.items():
@@ -157,8 +159,9 @@ def get_level_runs(username):
                 time_seconds = run['times']['primary_t']
                 time_formatted = convert_time(time_seconds)
                 user_data[level_name_to_acronym[level_name]] = time_formatted
+                detailed_data[level_name_to_acronym[level_name]].append((username, time_formatted))  # Add to detailed data
                 break  # Move to the next level once the fastest run is found
-    return user_data
+    return user_data, detailed_data
 
 # Prepare the data for all users and export to Excel
 def export_all_users_to_excel(usernames):
@@ -167,19 +170,41 @@ def export_all_users_to_excel(usernames):
     os.makedirs(export_dir, exist_ok=True)
 
     all_data = []
+    detailed_data_all = {acronym: [] for acronym in [
+        "BOB", "WF", "JRB", "CCM", "BBH", "HMC", "LLL", "SSL", "DDD", "SL", "WDW", "TTM", "THI", "TTC", "RR"
+    ]}
+
     for username in usernames:
-        user_data = get_level_runs(username)
+        user_data, detailed_data = get_level_runs(username)
         if user_data:
             all_data.append(user_data)
+            for level_acronym, details in detailed_data.items():
+                detailed_data_all[level_acronym].extend(details)
 
-    # Create a DataFrame and export to Excel
-    df = pd.DataFrame(all_data)
-    file_path = os.path.join(export_dir, "all_users_level_runs.xlsx")
-    df.to_excel(file_path, index=False)
+    # Create a DataFrame for overall level times and export to the first sheet
+    df_overall = pd.DataFrame(all_data)
+
+    # Use ExcelWriter to create multiple sheets
+    file_path = os.path.join(export_dir, "all_users_level_runs_with_lb.xlsx")
+    with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
+        df_overall.to_excel(writer, sheet_name="Overall Level Times", index=False)
+
+        # Create a sheet for each level
+        for level_acronym in detailed_data_all:
+            df_level = pd.DataFrame(detailed_data_all[level_acronym], columns=["Username", "Time"])
+            df_level = df_level.sort_values(by="Time")
+            df_level.insert(0, "Rank", range(1, len(df_level) + 1))
+            df_level.to_excel(writer, sheet_name=level_acronym, index=False)
+            # Write the title cell with the level name
+            worksheet = writer.sheets[level_acronym]
+            worksheet.write(0, 0, level_acronym)
+
     print(f"Exported data to {file_path}")
 
 # List of users to process
+#realones = ["vadien", "xwicko"]
 goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 
 # Export data for all users to Excel
+#export_all_users_to_excel(realones)
 export_all_users_to_excel(goats)
