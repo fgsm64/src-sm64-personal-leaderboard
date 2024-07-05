@@ -166,9 +166,9 @@ def fetch_user_data(username):
         return None, None
 
 def export_all_users_to_excel(usernames):
-    export_dir = "exports"
-    os.makedirs(export_dir, exist_ok=True)
-
+    # Use the current directory
+    export_dir = os.path.dirname(os.path.abspath(__file__))
+    
     all_data = []
     detailed_data_all = {acronym: [] for acronym in [
         "BOB", "WF", "JRB", "CCM", "BBH", "HMC", "LLL", "SSL", "DDD", "SL", "WDW", "TTM", "THI", "TTC", "RR"
@@ -199,6 +199,7 @@ def export_all_users_to_excel(usernames):
             worksheet.write(0, 0, level_acronym)
 
     print(f"Exported data to {file_path}")
+
 
 goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 export_all_users_to_excel(goats)
