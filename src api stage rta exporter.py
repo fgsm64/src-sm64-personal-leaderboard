@@ -2,11 +2,16 @@ import requests
 import pandas as pd
 import os
 import xlsxwriter
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import lru_cache
+
+start = time.process_time()
 
 # Define the base URL for the Speedrun.com API
 base_url = "https://www.speedrun.com/api/v1"
 
-# Function to get game ID by game name
+@lru_cache(maxsize=1000)
 def get_game_id(game_name):
     response = requests.get(f"{base_url}/games", params={"name": game_name})
     if response.status_code == 200:
@@ -16,7 +21,7 @@ def get_game_id(game_name):
                 return game['id']
     return None
 
-# Function to get user ID by username
+@lru_cache(maxsize=1000)
 def get_user_id(username):
     response = requests.get(f"{base_url}/users/{username}")
     if response.status_code == 200:
@@ -25,7 +30,7 @@ def get_user_id(username):
     else:
         return None
 
-# Function to get category name by category ID
+@lru_cache(maxsize=1000)
 def get_category_name(category_id):
     response = requests.get(f"{base_url}/categories/{category_id}")
     if response.status_code == 200:
@@ -34,7 +39,7 @@ def get_category_name(category_id):
     else:
         return "Unknown Category"
 
-# Function to get level name by level ID
+@lru_cache(maxsize=1000)
 def get_level_name(level_id):
     response = requests.get(f"{base_url}/levels/{level_id}")
     if response.status_code == 200:
@@ -43,7 +48,6 @@ def get_level_name(level_id):
     else:
         return "Unknown Level"
 
-# Function to get runs by user ID with pagination
 def get_runs_by_user(user_id):
     runs = []
     url = f"{base_url}/runs"
@@ -65,15 +69,12 @@ def get_runs_by_user(user_id):
             break
     return runs
 
-# Function to convert time in seconds to minutes:seconds.milliseconds format
 def convert_time(seconds):
     minutes = int(seconds // 60)
     remaining_seconds = seconds % 60
     return f"{minutes}:{remaining_seconds:06.3f}"
 
-# Main function to get level runs for a user and return as a dictionary
 def get_level_runs(username):
-    # Define the desired order of levels and their acronyms
     level_order = [
         "Bob-omb Battlefield",
         "Whomp's Fortress",
@@ -110,17 +111,14 @@ def get_level_runs(username):
         "RR"
     ]
 
-    # Create a mapping from full names to acronyms
     level_name_to_acronym = dict(zip(level_order, acronyms))
 
-    # Get the game ID
     game_name = "Super Mario 64"
     game_id = get_game_id(game_name)
     if not game_id:
         print("Failed to retrieve game ID.")
         return {}
 
-    # Get the user ID
     user_id = get_user_id(username)
     if not user_id:
         print("Failed to retrieve user ID.")
@@ -128,17 +126,14 @@ def get_level_runs(username):
 
     print(f"Fetching level runs for user: {username}")
 
-    # Get all runs for the user with pagination
     all_runs = get_runs_by_user(user_id)
     if not all_runs:
         print("Failed to retrieve runs or no runs found.")
         return {}
 
-    # Filter runs to include only those for the specified game and approved runs
     level_runs = [run for run in all_runs if run['game'] == game_id and run['level'] and run['status']['status'] == 'verified']
     fastest_runs = {}
 
-    # Find the fastest run for each level and category
     for run in level_runs:
         time = run['times']['primary_t']
         category_id = run['category']
@@ -148,9 +143,8 @@ def get_level_runs(username):
         if key not in fastest_runs or time < fastest_runs[key]['times']['primary_t']:
             fastest_runs[key] = run
 
-    # Prepare data for export
     user_data = {"Username": username}
-    detailed_data = {acronym: [] for acronym in acronyms}  # Prepare detailed data for each level
+    detailed_data = {acronym: [] for acronym in acronyms}
     for level_name in level_order:
         user_data[level_name_to_acronym[level_name]] = ""
         for key, run in fastest_runs.items():
@@ -159,52 +153,54 @@ def get_level_runs(username):
                 time_seconds = run['times']['primary_t']
                 time_formatted = convert_time(time_seconds)
                 user_data[level_name_to_acronym[level_name]] = time_formatted
-                detailed_data[level_name_to_acronym[level_name]].append((username, time_formatted))  # Add to detailed data
-                break  # Move to the next level once the fastest run is found
+                detailed_data[level_name_to_acronym[level_name]].append((username, time_formatted))
+                break
     return user_data, detailed_data
 
-# Prepare the data for all users and export to Excel
-def export_all_users_to_excel(usernames):
-    # Ensure the 'exports' directory exists
-    export_dir = "exports"
-    os.makedirs(export_dir, exist_ok=True)
+def fetch_user_data(username):
+    try:
+        return get_level_runs(username)
+    except Exception as e:
+        print(f"Error fetching data for {username}: {e}")
+        return None, None
 
+def export_all_users_to_excel(usernames):
+    # Use the current directory
+    export_dir = os.path.dirname(os.path.abspath(__file__))
+    
     all_data = []
     detailed_data_all = {acronym: [] for acronym in [
         "BOB", "WF", "JRB", "CCM", "BBH", "HMC", "LLL", "SSL", "DDD", "SL", "WDW", "TTM", "THI", "TTC", "RR"
     ]}
 
-    for username in usernames:
-        user_data, detailed_data = get_level_runs(username)
-        if user_data:
-            all_data.append(user_data)
-            for level_acronym, details in detailed_data.items():
-                detailed_data_all[level_acronym].extend(details)
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_username = {executor.submit(fetch_user_data, username): username for username in usernames}
+        for future in as_completed(future_to_username):
+            username = future_to_username[future]
+            user_data, detailed_data = future.result()
+            if user_data:
+                all_data.append(user_data)
+                for level_acronym, details in detailed_data.items():
+                    detailed_data_all[level_acronym].extend(details)
 
-    # Create a DataFrame for overall level times and export to the first sheet
     df_overall = pd.DataFrame(all_data)
 
-    # Use ExcelWriter to create multiple sheets
-    file_path = os.path.join(export_dir, "all_users_level_runs_with_lb.xlsx")
+    file_path = os.path.join(export_dir, "all_users_level_runs.xlsx")
     with pd.ExcelWriter(file_path, engine='xlsxwriter') as writer:
         df_overall.to_excel(writer, sheet_name="Overall Level Times", index=False)
 
-        # Create a sheet for each level
         for level_acronym in detailed_data_all:
             df_level = pd.DataFrame(detailed_data_all[level_acronym], columns=["Username", "Time"])
             df_level = df_level.sort_values(by="Time")
             df_level.insert(0, "Rank", range(1, len(df_level) + 1))
             df_level.to_excel(writer, sheet_name=level_acronym, index=False)
-            # Write the title cell with the level name
             worksheet = writer.sheets[level_acronym]
             worksheet.write(0, 0, level_acronym)
 
     print(f"Exported data to {file_path}")
 
-# List of users to process
-#realones = ["vadien", "xwicko"]
-goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 
-# Export data for all users to Excel
-#export_all_users_to_excel(realones)
+goats = ["vadien", "xwicko", "piegolds", "oatslice", "montyvr", "raisn", "fgsm", "nahottv", "sanj", "twig64", "pegitheloca", "ghdevil666", "packerzilla", "lfoxy"]
 export_all_users_to_excel(goats)
+
+print(time.process_time() - start)
