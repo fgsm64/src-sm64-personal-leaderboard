@@ -1,4 +1,4 @@
-# Prerequisites
+# How to use
 
 Install [python3](https://www.python.org/downloads/)  
 
